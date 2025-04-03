@@ -32,6 +32,16 @@
       border: none; color: white; cursor: pointer;
     }
     .tab-button.active { background: #555; }
+    .color-preview {
+      width: 50px; height: 20px; margin-left: 10px;
+      display: inline-block; vertical-align: middle;
+      border: 1px solid #fff;
+    }
+    .color-group {
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #444;
+    }
   </style>
 </head>
 <body>
@@ -39,6 +49,7 @@
     <div class="tab-buttons">
       <button class="tab-button active" onclick="openTab('settingsTab')">Settings</button>
       <button class="tab-button" onclick="openTab('mediaTab')">Media</button>
+      <button class="tab-button" onclick="openTab('colorTab')">Colors</button>
     </div>
     
     <div id="settingsTab" class="tab active">
@@ -94,6 +105,60 @@
         <button id="micBtn">USE MICROPHONE</button>
       </div>
     </div>
+    
+    <div id="colorTab" class="tab">
+      <div class="color-group">
+        <h3>Bright Areas</h3>
+        <div class="slider-container">
+          <label>Bright R:</label>
+          <input type="range" id="brightR" min="0" max="255" value="200">
+          <div class="color-preview" id="brightPreviewR"></div>
+        </div>
+        <div class="slider-container">
+          <label>Bright G:</label>
+          <input type="range" id="brightG" min="0" max="255" value="200">
+          <div class="color-preview" id="brightPreviewG"></div>
+        </div>
+        <div class="slider-container">
+          <label>Bright B:</label>
+          <input type="range" id="brightB" min="0" max="255" value="255">
+          <div class="color-preview" id="brightPreviewB"></div>
+        </div>
+        <div class="slider-container">
+          <label>Bright Preview:</label>
+          <div class="color-preview" id="brightPreview" style="width:100px;"></div>
+        </div>
+      </div>
+      
+      <div class="color-group">
+        <h3>Dark Areas</h3>
+        <div class="slider-container">
+          <label>Dark R:</label>
+          <input type="range" id="darkR" min="0" max="255" value="50">
+          <div class="color-preview" id="darkPreviewR"></div>
+        </div>
+        <div class="slider-container">
+          <label>Dark G:</label>
+          <input type="range" id="darkG" min="0" max="255" value="50">
+          <div class="color-preview" id="darkPreviewG"></div>
+        </div>
+        <div class="slider-container">
+          <label>Dark B:</label>
+          <input type="range" id="darkB" min="0" max="255" value="150">
+          <div class="color-preview" id="darkPreviewB"></div>
+        </div>
+        <div class="slider-container">
+          <label>Dark Preview:</label>
+          <div class="color-preview" id="darkPreview" style="width:100px;"></div>
+        </div>
+      </div>
+      
+      <div class="slider-container">
+        <label>Color Blend:</label>
+        <input type="range" id="colorBlend" min="0" max="100" value="50">
+      </div>
+      <button id="applyColorBtn">APPLY COLORS</button>
+    </div>
   </div>
   
   <div id="startMessage">CLICK START TO BEGIN</div>
@@ -114,7 +179,14 @@ let audioContext;
 let isDispersing = false;
 let disperseProgress = 0;
 
-// Parameters
+// Color parameters for bright and dark areas
+let colorParams = {
+  bright: { r: 200, g: 200, b: 255 },
+  dark: { r: 50, g: 50, b: 150 },
+  blend: 0.5
+};
+
+// Other parameters
 let params = {
   formationSpeed: 0.02,
   bassReact: 0.8,
@@ -140,6 +212,9 @@ function setup() {
   // Setup event listeners
   setupControls();
   noStroke();
+  
+  // Initialize color previews
+  updateColorPreviews();
 }
 
 function setupControls() {
@@ -168,6 +243,43 @@ function setupControls() {
     loopDuration = parseInt(e.target.value);
   };
 
+  // Bright area color controls
+  document.getElementById('brightR').oninput = e => {
+    colorParams.bright.r = parseInt(e.target.value);
+    updateColorPreviews();
+  };
+  document.getElementById('brightG').oninput = e => {
+    colorParams.bright.g = parseInt(e.target.value);
+    updateColorPreviews();
+  };
+  document.getElementById('brightB').oninput = e => {
+    colorParams.bright.b = parseInt(e.target.value);
+    updateColorPreviews();
+  };
+
+  // Dark area color controls
+  document.getElementById('darkR').oninput = e => {
+    colorParams.dark.r = parseInt(e.target.value);
+    updateColorPreviews();
+  };
+  document.getElementById('darkG').oninput = e => {
+    colorParams.dark.g = parseInt(e.target.value);
+    updateColorPreviews();
+  };
+  document.getElementById('darkB').oninput = e => {
+    colorParams.dark.b = parseInt(e.target.value);
+    updateColorPreviews();
+  };
+
+  // Blend control
+  document.getElementById('colorBlend').oninput = e => {
+    colorParams.blend = e.target.value / 100;
+    updateColorPreviews();
+  };
+
+  // Apply colors button
+  document.getElementById('applyColorBtn').onclick = applyColors;
+
   // Main buttons
   document.getElementById('startBtn').onclick = startExperience;
   document.getElementById('resetBtn').onclick = resetFormation;
@@ -181,7 +293,40 @@ function setupControls() {
   document.getElementById('micBtn').onclick = toggleMic;
 }
 
-// Media loading functions
+function updateColorPreviews() {
+  // Update bright color previews
+  document.getElementById('brightPreviewR').style.backgroundColor = `rgb(${colorParams.bright.r}, 0, 0)`;
+  document.getElementById('brightPreviewG').style.backgroundColor = `rgb(0, ${colorParams.bright.g}, 0)`;
+  document.getElementById('brightPreviewB').style.backgroundColor = `rgb(0, 0, ${colorParams.bright.b})`;
+  document.getElementById('brightPreview').style.backgroundColor = 
+    `rgb(${colorParams.bright.r}, ${colorParams.bright.g}, ${colorParams.bright.b})`;
+  
+  // Update dark color previews
+  document.getElementById('darkPreviewR').style.backgroundColor = `rgb(${colorParams.dark.r}, 0, 0)`;
+  document.getElementById('darkPreviewG').style.backgroundColor = `rgb(0, ${colorParams.dark.g}, 0)`;
+  document.getElementById('darkPreviewB').style.backgroundColor = `rgb(0, 0, ${colorParams.dark.b})`;
+  document.getElementById('darkPreview').style.backgroundColor = 
+    `rgb(${colorParams.dark.r}, ${colorParams.dark.g}, ${colorParams.dark.b})`;
+}
+
+function applyColors() {
+  if (particles.length > 0) {
+    for (let p of particles) {
+      // Calculate brightness factor (0-1) based on original image
+      let brightness = p.originalBrightness / 255;
+      
+      // Blend between dark and bright colors based on brightness
+      let blendFactor = pow(brightness, colorParams.blend * 2);
+      
+      p.color = [
+        lerp(colorParams.dark.r, colorParams.bright.r, blendFactor),
+        lerp(colorParams.dark.g, colorParams.bright.g, blendFactor),
+        lerp(colorParams.dark.b, colorParams.bright.b, blendFactor)
+      ];
+    }
+  }
+}
+
 function loadImageFromUrl() {
   let url = document.getElementById('imageUrl').value;
   if (url) {
@@ -315,18 +460,23 @@ function initParticles(resetPositions = true) {
             p5.Vector.random3D().mult(random(500, 1000)) : 
             target.copy().add(p5.Vector.random3D().mult(1000));
           
+          // Calculate initial color based on brightness
+          let brightnessFactor = brightness / 255;
+          let blendFactor = pow(brightnessFactor, colorParams.blend * 2);
+          
           particles.push({
             pos: startPos,
             target: target,
             originalTarget: target.copy(),
             color: [
-              150 + brightness * 0.4,
-              150 + brightness * 0.4,
-              255 - brightness * 0.5
+              lerp(colorParams.dark.r, colorParams.bright.r, blendFactor),
+              lerp(colorParams.dark.g, colorParams.bright.g, blendFactor),
+              lerp(colorParams.dark.b, colorParams.bright.b, blendFactor)
             ],
             size: map(brightness, 0, 255, 2, 6),
             speed: random(0.5, 1.5),
-            offset: random(0.3)
+            offset: random(0.3),
+            originalBrightness: brightness // Store original brightness for color updates
           });
         }
       }

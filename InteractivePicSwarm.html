@@ -65,6 +65,9 @@
       <button id="startBtn">START</button>
       <button id="resetBtn">RESET FORMATION</button>
       <button id="loopBtn">TOGGLE LOOP</button>
+      <div class="slider-container">
+        <label>Press R to rotate</label>
+      </div>
     </div>
     
     <div id="mediaTab" class="tab">
@@ -108,6 +111,8 @@ let loopStartTime = 0;
 let loopDuration = 30;
 let usingMic = false;
 let audioContext;
+let isDispersing = false;
+let disperseProgress = 0;
 
 // Parameters
 let params = {
@@ -118,7 +123,7 @@ let params = {
 
 function preload() {
   // Default assets
-  img = loadImage('https://99designs-blog.imgix.net/blog/wp-content/uploads/2022/06/Starbucks_Corporation_Logo_2011.svg-e1657703028844.png?auto=format&q=60&fit=max&w=930', 
+  img = loadImage('https://99designs-blog.imgix.net/blog/wp-content/uploads/2022/06/Starbucks_Corporation_Logo_2011.svg-e1657703028844.png', 
     () => console.log("Default image loaded"),
     () => console.error("Error loading default image")
   );
@@ -274,7 +279,7 @@ function startExperience() {
       sound.loop();
       fft = new p5.FFT();
     }
-    initParticles();
+    initParticles(true);
     isReady = true;
     document.getElementById('startMessage').style.display = 'none';
     loopStartTime = millis();
@@ -282,45 +287,65 @@ function startExperience() {
 }
 
 function resetFormation() {
-  formationProgress = 0;
-  initParticles();
+  isDispersing = true;
+  disperseProgress = 0;
   loopStartTime = millis();
 }
 
-function initParticles() {
+function initParticles(resetPositions = true) {
   if (!img) return;
   
   img.loadPixels();
-  particles = [];
   
-  // Create particles at target positions
-  for (let y = 0; y < img.height; y += 5) {
-    for (let x = 0; x < img.width; x += 5) {
-      let idx = (x + y * img.width) * 4;
-      let brightness = img.pixels[idx];
-      if (brightness > 50) {
-        // Target position in 3D space
-        let target = createVector(
-          (x - img.width/2) * 0.8,
-          (y - img.height/2) * 0.8,
-          0
-        );
-        
-        // Start position - spawn from random 3D directions
-        let startPos = p5.Vector.random3D().mult(random(500, 1000));
-        
-        particles.push({
-          pos: startPos,
-          target: target,
-          color: [
-            150 + brightness * 0.4,
-            150 + brightness * 0.4,
-            255 - brightness * 0.5
-          ],
-          size: map(brightness, 0, 255, 2, 6),
-          speed: random(0.5, 1.5),
-          offset: random(0.3)
-        });
+  if (particles.length === 0 || resetPositions) {
+    particles = [];
+    
+    for (let y = 0; y < img.height; y += 5) {
+      for (let x = 0; x < img.width; x += 5) {
+        let idx = (x + y * img.width) * 4;
+        let brightness = img.pixels[idx];
+        if (brightness > 50) {
+          let target = createVector(
+            (x - img.width/2) * 0.8,
+            (y - img.height/2) * 0.8,
+            0
+          );
+          
+          let startPos = resetPositions ? 
+            p5.Vector.random3D().mult(random(500, 1000)) : 
+            target.copy().add(p5.Vector.random3D().mult(1000));
+          
+          particles.push({
+            pos: startPos,
+            target: target,
+            originalTarget: target.copy(),
+            color: [
+              150 + brightness * 0.4,
+              150 + brightness * 0.4,
+              255 - brightness * 0.5
+            ],
+            size: map(brightness, 0, 255, 2, 6),
+            speed: random(0.5, 1.5),
+            offset: random(0.3)
+          });
+        }
+      }
+    }
+  } else {
+    let i = 0;
+    for (let y = 0; y < img.height; y += 5) {
+      for (let x = 0; x < img.width; x += 5) {
+        let idx = (x + y * img.width) * 4;
+        let brightness = img.pixels[idx];
+        if (brightness > 50 && i < particles.length) {
+          particles[i].target = createVector(
+            (x - img.width/2) * 0.8,
+            (y - img.height/2) * 0.8,
+            0
+          );
+          particles[i].originalTarget = particles[i].target.copy();
+          i++;
+        }
       }
     }
   }
@@ -332,8 +357,20 @@ function draw() {
   if (!isReady) return;
 
   // Handle looping
-  if (isLooping && millis() - loopStartTime > loopDuration * 1000) {
-    resetFormation();
+  if (isLooping) {
+    let loopTime = millis() - loopStartTime;
+    let loopProgress = loopTime / (loopDuration * 1000);
+    
+    if (loopProgress > 0.8 && !isDispersing && formationProgress >= 0.99) {
+      resetFormation();
+    }
+    
+    if (loopProgress >= 1 && isDispersing) {
+      isDispersing = false;
+      formationProgress = 0;
+      initParticles(true);
+      loopStartTime = millis();
+    }
   }
 
   // Audio analysis
@@ -350,9 +387,17 @@ function draw() {
     rotateX(sin(frameCount * 0.01) * 0.2);
   }
   
-  // Update formation
-  if (formationProgress < 1) {
-    formationProgress += params.formationSpeed;
+  // Update formation/dispersal progress
+  if (isDispersing) {
+    disperseProgress += params.formationSpeed;
+    if (disperseProgress >= 1) {
+      isDispersing = false;
+      disperseProgress = 0;
+      formationProgress = 0;
+      initParticles(true);
+    }
+  } else if (formationProgress < 1) {
+    formationProgress = min(1, formationProgress + params.formationSpeed);
   }
   
   // Lighting
@@ -361,10 +406,23 @@ function draw() {
   
   // Draw particles
   for (let p of particles) {
-    // Animate formation
-    let t = max(0, min(1, (formationProgress - p.offset) / (1 - p.offset)));
-    if (t > 0) {
-      p.pos.lerp(p.target, t * 0.1 * p.speed);
+    // Handle formation animation
+    if (!isDispersing) {
+      let t = max(0, min(1, (formationProgress - p.offset) / (1 - p.offset)));
+      if (t > 0) {
+        let target = p5.Vector.lerp(p.originalTarget, p.target, formationProgress);
+        p.pos.lerp(target, t * 0.1 * p.speed);
+      }
+    }
+    
+    // Handle dispersal animation
+    if (isDispersing) {
+      let dispersalVector = p5.Vector.sub(p.pos, p.originalTarget);
+      dispersalVector.normalize();
+      dispersalVector.add(p5.Vector.random3D().mult(0.3));
+      dispersalVector.mult(1000);
+      
+      p.pos.lerp(dispersalVector, disperseProgress * 0.03 * p.speed);
     }
     
     // Audio reactions
@@ -378,7 +436,6 @@ function draw() {
       p.pos.z + sin(frameCount * 0.05) * bassEffect * 5
     );
     
-    // Size pulses with bass
     fill(p.color[0], p.color[1], p.color[2], 220);
     sphere(p.size * bassEffect);
     

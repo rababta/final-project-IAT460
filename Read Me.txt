@@ -1,4 +1,0 @@
-- Please use the project in this GitHub repo instead of the submitted Zip file
-- The zip file does not include the color customization or the looping features
-
-Thank you!
